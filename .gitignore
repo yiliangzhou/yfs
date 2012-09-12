@@ -10,3 +10,12 @@
 *.lai
 *.la
 *.a
+
+# Compiled output
+*.d
+
+# executable files
+lock_demo
+lock_server
+lock_tester
+rpc/rpctest
