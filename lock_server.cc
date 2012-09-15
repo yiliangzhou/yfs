@@ -16,8 +16,8 @@ lock_server::lock_server():
 
 lock_server::~lock_server() 
 {
-  // pthread_mutex_destory(&mutexLockMap);
-  // pthread_cond_destory(&lockAvailableCon);
+   pthread_mutex_destroy(&mutexLockMap);
+   pthread_cond_destroy(&lockAvailableCon);
 }
 
 lock_protocol::status
@@ -42,15 +42,15 @@ lock_server::acquire(int clt, lock_protocol::lockid_t lid, int &r)
     // ready to return
   } else {
     // lock exist
-    if(LOCKED == lockToStatus[lid]) {
+    //if(LOCKED == lockToStatus[lid]) {
       // block current thread, and wait for the release
       // of the lock by another thread
       while(LOCKED == lockToStatus[lid]) {
         pthread_cond_wait(&lockAvailableCon, &mutexLockMap);
       }
-    } else {
+    //} else {
       lockToStatus[lid] = LOCKED;
-    }
+   // }
   }
 
   printf("acuqire request from clt %d granted!\n", clt);

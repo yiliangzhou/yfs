@@ -662,7 +662,37 @@ rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
 {
 	ScopedLock rwl(&reply_window_m_);
 
-        // You fill this in for Lab 1.
+        std::list<reply_t>::iterator it;
+        
+        // update the reply window for clt_nonce
+        for(it = reply_window_[clt_nonce].begin(); it !=  reply_window_[clt_nonce].end(); it++) {
+            // whether or not a reply is out-dated
+            if(it->xid <= xid_rep) {
+                // outdated
+                reply_window_[clt_nonce].erase(it);
+            }
+        }
+
+        if(xid < reply_window_[clt_nonce].back().xid) {
+            return FORGOTTEN;
+        }
+
+        for(it = reply_window_[clt_nonce].begin(); it != reply_window_[clt_nonce].end(); it++) {
+            // whether or not we have found the xid
+            if(xid == it->xid) {
+                // whether or not processed
+                if(true == it->cb_present) {
+                    // DONE
+                    b = &(it->buf);
+                    sz = &(it->sz);
+                    return DONE;
+                }else{
+                    // INPROGRESS
+                    return INPROGRESS;
+                }
+                // break;
+            }
+        }
 	return NEW;
 }
 
@@ -676,7 +706,10 @@ rpcs::add_reply(unsigned int clt_nonce, unsigned int xid,
 		char *b, int sz)
 {
 	ScopedLock rwl(&reply_window_m_);
-        // You fill this in for Lab 1.
+        // push new reply on the front of the list.
+        reply_t rp(xid);
+        reply_window_[clt_nonce].push_front(rp);
+        return;
 }
 
 void
