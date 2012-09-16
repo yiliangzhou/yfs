@@ -630,7 +630,7 @@ rpcs::dispatch(djob_t *j)
 		case INPROGRESS: // server is working on this request
 			break;
 		case DONE: // duplicate and we still have the response
-			printf("%s\n", b1);
+			//printf("%s\n", b1);
                         c->send(b1, sz1);
                         printf("sent done \n");
 			break;
@@ -669,7 +669,7 @@ rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
         std::list<reply_t>::iterator it;
         // if this request has seen before, return the sotred value if it's valid
         // return INPROGRESS if it's not valid.
-        printf("position 1 clt %u xid = %u xid_rep = %u in progress\n", clt_nonce, xid,xid_rep);
+        printf("position 1 clt %u xid = %u xid_rep = %u at beginning\n", clt_nonce, xid,xid_rep);
 
         for(it = reply_window_[clt_nonce].begin(); it != reply_window_[clt_nonce].end(); it++) {
             // whether or not we have found the xid
@@ -679,20 +679,19 @@ rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
                 printf("another inner scope\n");
                 if(true == it->cb_present) {
                     // DONE
-                    b = &(it->buf);
-                    sz = &(it->sz);
+                    (*b) = it->buf;
+                    (*sz) = it->sz;
                     printf("ture\n");
                     return DONE;
                 }else{
                     // INPROGRESS
-                    printf("in progress\n");
-                    printf("clt %u xid = %u in progress\n", clt_nonce, xid);
+                    printf("clt %u xid = %u xid_rep = %u in progress\n", clt_nonce, xid, xid_rep);
                     return INPROGRESS;
                 }
                 // break;
             }
         } 
-        printf("position 2 clt %u xid = %u xid_rep = %u in progress\n", clt_nonce, xid,xid_rep);
+        printf("position 2 clt %u xid = %u xid_rep = %u after done and progress\n", clt_nonce, xid,xid_rep);
 
         // can not find xid, either new or forgotten.
 	if((reply_window_[clt_nonce].size() != 0 && xid <= reply_max_ack_[clt_nonce])
@@ -702,7 +701,7 @@ rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
             return FORGOTTEN;
         } 
 
-        printf("position 3 clt %u xid = %u xid_rep = %u in progress\n", clt_nonce, xid,xid_rep);
+        printf("position 3 clt %u xid = %u xid_rep = %u after forgotten\n", clt_nonce, xid,xid_rep);
 
         // a new request
         // *** list insertion is very bad....
@@ -727,11 +726,11 @@ rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
 
         update__:
         
-        printf("position 4 clt %u xid = %u xid_rep = %u in progress\n", clt_nonce, xid,xid_rep);
+        printf("position 4 clt %u xid = %u xid_rep = %u after insertion\n", clt_nonce, xid,xid_rep);
 
         if(xid_rep > reply_max_ack_[clt_nonce]) { reply_max_ack_[clt_nonce] = xid_rep; }
         
-        printf("position 5 clt %u xid = %u xid_rep = %u in progress\n", clt_nonce, xid,xid_rep);
+        printf("position 5 clt %u xid = %u xid_rep = %u after update ack\n", clt_nonce, xid,xid_rep);
 
         // update the reply window for clt_nonce
         for(it = reply_window_[clt_nonce].begin(); it !=  reply_window_[clt_nonce].end(); it++) {
@@ -741,12 +740,12 @@ rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
             
             if(it->xid <= reply_max_ack_[clt_nonce]) {
                 // outdated
-
+                free(it->buf);
                 it = reply_window_[clt_nonce].erase(it);
             }
         }
         
-        printf("position 6 clt %u xid = %u xid_rep = %u in progress\n", clt_nonce, xid,xid_rep);
+        printf("position 6 clt %u xid = %u xid_rep = %u after update window\n", clt_nonce, xid,xid_rep);
 
         // printf("clt %u xid = %u in before NEW\n",clt_nonce, xid);
         return NEW;
@@ -767,7 +766,8 @@ rpcs::add_reply(unsigned int clt_nonce, unsigned int xid,
         for(it = reply_window_[clt_nonce].begin(); it != reply_window_[clt_nonce].end(); it++) {
             if(xid == it->xid) {
                 it->cb_present = true;
-                it->buf = b;
+                it->buf = new char[sz+1];
+                memcpy(it->buf, b, sz);
                 it->sz = sz;
                 break;
             }
