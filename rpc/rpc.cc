@@ -415,7 +415,7 @@ rpcs::rpcs(unsigned int p1, int count)
 	VERIFY(pthread_mutex_init(&count_m_, 0) == 0);
 	VERIFY(pthread_mutex_init(&reply_window_m_, 0) == 0);
 	VERIFY(pthread_mutex_init(&conss_m_, 0) == 0);
-
+        VERIFY(pthread_mutex_init(&reply_max_ack_m_,0) == 0);
 	set_rand_seed();
 	nonce_ = random();
 	jsl_log(JSL_DBG_2, "rpcs::rpcs created with nonce %d\n", nonce_);
@@ -556,6 +556,7 @@ rpcs::dispatch(djob_t *j)
 			// if we don't know about this clt_nonce, create a cleanup object
 			if(reply_window_.find(h.clt_nonce) == reply_window_.end()){
 				VERIFY (reply_window_[h.clt_nonce].size() == 0); // create
+                                reply_max_ack_[h.clt_nonce] = 0;
 				jsl_log(JSL_DBG_2,
 						"rpcs::dispatch: new client %u xid %d chan %d, total clients %d\n", 
 						h.clt_nonce, h.xid, c->channo(), (int)reply_window_.size());
@@ -629,7 +630,9 @@ rpcs::dispatch(djob_t *j)
 		case INPROGRESS: // server is working on this request
 			break;
 		case DONE: // duplicate and we still have the response
-			c->send(b1, sz1);
+			printf("%s\n", b1);
+                        c->send(b1, sz1);
+                        printf("sent done \n");
 			break;
 		case FORGOTTEN: // very old request and we don't have the response anymore
 			jsl_log(JSL_DBG_2, "rpcs::dispatch: very old request %u from %u\n", 
@@ -661,39 +664,92 @@ rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
 		unsigned int xid_rep, char **b, int *sz)
 {
 	ScopedLock rwl(&reply_window_m_);
+        ScopedLock rma1(&reply_max_ack_m_);
 
         std::list<reply_t>::iterator it;
-        
-        // update the reply window for clt_nonce
-        for(it = reply_window_[clt_nonce].begin(); it !=  reply_window_[clt_nonce].end(); it++) {
-            // whether or not a reply is out-dated
-            if(it->xid <= xid_rep) {
-                // outdated
-                reply_window_[clt_nonce].erase(it);
-            }
-        }
-
-        if(xid < reply_window_[clt_nonce].back().xid) {
-            return FORGOTTEN;
-        }
+        // if this request has seen before, return the sotred value if it's valid
+        // return INPROGRESS if it's not valid.
+        printf("position 1 clt %u xid = %u xid_rep = %u in progress\n", clt_nonce, xid,xid_rep);
 
         for(it = reply_window_[clt_nonce].begin(); it != reply_window_[clt_nonce].end(); it++) {
             // whether or not we have found the xid
+            printf("small inner loop\n");
             if(xid == it->xid) {
                 // whether or not processed
+                printf("another inner scope\n");
                 if(true == it->cb_present) {
                     // DONE
                     b = &(it->buf);
                     sz = &(it->sz);
+                    printf("ture\n");
                     return DONE;
                 }else{
                     // INPROGRESS
+                    printf("in progress\n");
+                    printf("clt %u xid = %u in progress\n", clt_nonce, xid);
                     return INPROGRESS;
                 }
                 // break;
             }
+        } 
+        printf("position 2 clt %u xid = %u xid_rep = %u in progress\n", clt_nonce, xid,xid_rep);
+
+        // can not find xid, either new or forgotten.
+	if((reply_window_[clt_nonce].size() != 0 && xid <= reply_max_ack_[clt_nonce])
+           || (reply_window_[clt_nonce].size() == 0 && xid_rep != 0)) {
+             printf("in forgotten\n");
+            printf("clt %u xid = %u reply = %u in forgotten\n",clt_nonce, xid, xid_rep);
+            return FORGOTTEN;
+        } 
+
+        printf("position 3 clt %u xid = %u xid_rep = %u in progress\n", clt_nonce, xid,xid_rep);
+
+        // a new request
+        // *** list insertion is very bad....
+        reply_t rp_m_(xid);
+        if (0 == reply_window_[clt_nonce].size()) { 
+            reply_window_[clt_nonce].push_front(rp_m_);
+            printf("clt %u xid = %u in insertion new request at begin\n",clt_nonce, xid);
+        } else {
+            for(it = reply_window_[clt_nonce].begin(); it != reply_window_[clt_nonce].end(); it++) {
+                if(it->xid < xid) {
+                    // reply_t rp_m_(xid);
+                
+                    printf("clt %u xid = %u in insertion new request\n",clt_nonce, xid);
+                    reply_window_[clt_nonce].insert(it, rp_m_);
+                    goto update__;
+                }
+            }
+            printf("clt %u xid = %u in insertion new request at back\n",clt_nonce, xid);
+
+            reply_window_[clt_nonce].push_back(rp_m_);
         }
-	return NEW;
+
+        update__:
+        
+        printf("position 4 clt %u xid = %u xid_rep = %u in progress\n", clt_nonce, xid,xid_rep);
+
+        if(xid_rep > reply_max_ack_[clt_nonce]) { reply_max_ack_[clt_nonce] = xid_rep; }
+        
+        printf("position 5 clt %u xid = %u xid_rep = %u in progress\n", clt_nonce, xid,xid_rep);
+
+        // update the reply window for clt_nonce
+        for(it = reply_window_[clt_nonce].begin(); it !=  reply_window_[clt_nonce].end(); it++) {
+            // whether or not a reply is out-dated
+            
+            // printf("xid_rep = %u stored id = %u \n", xid_rep, it->xid);
+            
+            if(it->xid <= reply_max_ack_[clt_nonce]) {
+                // outdated
+
+                it = reply_window_[clt_nonce].erase(it);
+            }
+        }
+        
+        printf("position 6 clt %u xid = %u xid_rep = %u in progress\n", clt_nonce, xid,xid_rep);
+
+        // printf("clt %u xid = %u in before NEW\n",clt_nonce, xid);
+        return NEW;
 }
 
 // rpcs::dispatch calls add_reply when it is sending a reply to an RPC,
@@ -707,8 +763,15 @@ rpcs::add_reply(unsigned int clt_nonce, unsigned int xid,
 {
 	ScopedLock rwl(&reply_window_m_);
         // push new reply on the front of the list.
-        reply_t rp(xid);
-        reply_window_[clt_nonce].push_front(rp);
+        std::list<reply_t>::iterator it;
+        for(it = reply_window_[clt_nonce].begin(); it != reply_window_[clt_nonce].end(); it++) {
+            if(xid == it->xid) {
+                it->cb_present = true;
+                it->buf = b;
+                it->sz = sz;
+                break;
+            }
+        }
         return;
 }
 

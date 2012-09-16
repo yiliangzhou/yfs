@@ -36,7 +36,6 @@ lock_server::acquire(int clt, lock_protocol::lockid_t lid, int &r)
   lock_protocol::status ret = lock_protocol::OK;
   /* get exclusive access to map */
   pthread_mutex_lock(&mutexLockMap);
-  printf("acquire request from clt %d\n", clt);
   if(lockToStatus.find(lid) == lockToStatus.end()) {
     lockToStatus.insert(std::map<lock_protocol::lockid_t, LockStatus>::value_type(lid, LOCKED));
     // ready to return
@@ -52,14 +51,11 @@ lock_server::acquire(int clt, lock_protocol::lockid_t lid, int &r)
       lockToStatus[lid] = LOCKED;
    // }
   }
-
-  printf("acuqire request from clt %d granted!\n", clt);
- 
   /* unlock the mutex, let other thread use it */
   pthread_mutex_unlock(&mutexLockMap);
 
   // the reply vlaue r doesn't matter
-  r = nacquire;
+  r = 0;
 
   // since no other place will make ret false, it will always return OK
   // but be aware of the timeout, check that later
@@ -72,23 +68,28 @@ lock_server::release(int clt, lock_protocol::lockid_t lid, int &r)
   lock_protocol::status ret = lock_protocol::OK;
   /* Enter Critical Section */
   pthread_mutex_lock(&mutexLockMap); 
-  printf("release request from clt %d\n", clt);
+  // printf("release request from clt %d\n", clt);
  
-  // lid exist
+  // try to release a none-exist lock
   if(lockToStatus.find(lid) == lockToStatus.end()) {
     // logical error : release a non-exist lock
+    ret = lock_protocol::RETRY;
+
   } else if(lockToStatus[lid] == FREE) {
     // logical error : it's already unlocked
+    ret = lock_protocol::RETRY;
   } else {
     lockToStatus[lid] = FREE;
     // notify any threads are waiting for this lock
     pthread_cond_broadcast(&lockAvailableCon);  
   }
-  printf("release request from clt %d granted\n", clt);
+  // printf("release request from clt %d granted\n", clt);
  
   /* Exit Critical Section */
   pthread_mutex_unlock(&mutexLockMap);
+
   r = nacquire;
+
   return ret;
 }
 

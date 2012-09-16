@@ -1,0 +1,21 @@
+# test 2995
+clear
+make
+killall lock_tester
+killall lock_server
+
+echo "AT LEAST ONCE"
+export RPC_LOSSY=0
+./lock_server 3000 &
+./lock_tester 3000
+
+echo "AT MOST ONCE"
+killall lock_tester
+killall lock_server
+
+export RPC_LOSSY=5
+./lock_server 3001 &
+./lock_tester 3001
+
+echo "TEST FINISH"
+
