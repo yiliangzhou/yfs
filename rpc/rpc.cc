@@ -556,7 +556,7 @@ rpcs::dispatch(djob_t *j)
 			// if we don't know about this clt_nonce, create a cleanup object
 			if(reply_window_.find(h.clt_nonce) == reply_window_.end()){
 				VERIFY (reply_window_[h.clt_nonce].size() == 0); // create
-                                reply_max_ack_[h.clt_nonce] = 0;
+                                reply_max_ack_[h.clt_nonce] = 0; // create and initialize
 				jsl_log(JSL_DBG_2,
 						"rpcs::dispatch: new client %u xid %d chan %d, total clients %d\n", 
 						h.clt_nonce, h.xid, c->channo(), (int)reply_window_.size());
@@ -630,9 +630,7 @@ rpcs::dispatch(djob_t *j)
 		case INPROGRESS: // server is working on this request
 			break;
 		case DONE: // duplicate and we still have the response
-			//printf("%s\n", b1);
                         c->send(b1, sz1);
-                        printf("sent done \n");
 			break;
 		case FORGOTTEN: // very old request and we don't have the response anymore
 			jsl_log(JSL_DBG_2, "rpcs::dispatch: very old request %u from %u\n", 
@@ -667,87 +665,69 @@ rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
         ScopedLock rma1(&reply_max_ack_m_);
 
         std::list<reply_t>::iterator it;
+
         // if this request has seen before, return the sotred value if it's valid
         // return INPROGRESS if it's not valid.
-        printf("position 1 clt %u xid = %u xid_rep = %u at beginning\n", clt_nonce, xid,xid_rep);
-
         for(it = reply_window_[clt_nonce].begin(); it != reply_window_[clt_nonce].end(); it++) {
             // whether or not we have found the xid
-            printf("small inner loop\n");
             if(xid == it->xid) {
                 // whether or not processed
-                printf("another inner scope\n");
                 if(true == it->cb_present) {
                     // DONE
                     (*b) = it->buf;
                     (*sz) = it->sz;
-                    printf("ture\n");
                     return DONE;
                 }else{
                     // INPROGRESS
-                    printf("clt %u xid = %u xid_rep = %u in progress\n", clt_nonce, xid, xid_rep);
                     return INPROGRESS;
                 }
-                // break;
             }
         } 
-        printf("position 2 clt %u xid = %u xid_rep = %u after done and progress\n", clt_nonce, xid,xid_rep);
 
-        // can not find xid, either new or forgotten.
+        // can not find xid, either NEW or FORGOTTEN.
 	if((reply_window_[clt_nonce].size() != 0 && xid <= reply_max_ack_[clt_nonce])
            || (reply_window_[clt_nonce].size() == 0 && xid_rep != 0)) {
-             printf("in forgotten\n");
-            printf("clt %u xid = %u reply = %u in forgotten\n",clt_nonce, xid, xid_rep);
+            // when the server is working normaly, here comes a very old request
+            // when the server just recovered, we are not sure about this new request
             return FORGOTTEN;
         } 
 
-        printf("position 3 clt %u xid = %u xid_rep = %u after forgotten\n", clt_nonce, xid,xid_rep);
 
-        // a new request
-        // *** list insertion is very bad....
-        reply_t rp_m_(xid);
-        if (0 == reply_window_[clt_nonce].size()) { 
+        // a new request, construct a new reply_t object, and inerst it properly
+        reply_t rp_m_(xid); 
+        if (0 == reply_window_[clt_nonce].size()) {
+            // the list is empty before insertion
             reply_window_[clt_nonce].push_front(rp_m_);
-            printf("clt %u xid = %u in insertion new request at begin\n",clt_nonce, xid);
         } else {
+            // insert the new request based on its xid number
+            // the list goes in decreasing sequence.
+            // the oldest xid at the end of the list
             for(it = reply_window_[clt_nonce].begin(); it != reply_window_[clt_nonce].end(); it++) {
                 if(it->xid < xid) {
-                    // reply_t rp_m_(xid);
-                
-                    printf("clt %u xid = %u in insertion new request\n",clt_nonce, xid);
                     reply_window_[clt_nonce].insert(it, rp_m_);
                     goto update__;
                 }
             }
-            printf("clt %u xid = %u in insertion new request at back\n",clt_nonce, xid);
-
+            // the new xid should be inserted at the end of the list.
             reply_window_[clt_nonce].push_back(rp_m_);
         }
 
         update__:
-        
-        printf("position 4 clt %u xid = %u xid_rep = %u after insertion\n", clt_nonce, xid,xid_rep);
-
+        // update the maximum reply for current clt_nonce
+        // we will trim our reply_window_ based on this field, 
         if(xid_rep > reply_max_ack_[clt_nonce]) { reply_max_ack_[clt_nonce] = xid_rep; }
         
-        printf("position 5 clt %u xid = %u xid_rep = %u after update ack\n", clt_nonce, xid,xid_rep);
-
         // update the reply window for clt_nonce
         for(it = reply_window_[clt_nonce].begin(); it !=  reply_window_[clt_nonce].end(); it++) {
             // whether or not a reply is out-dated
-            
-            // printf("xid_rep = %u stored id = %u \n", xid_rep, it->xid);
-            
             if(it->xid <= reply_max_ack_[clt_nonce]) {
+                // the stored xid is smaller than the client's maximum ackownedged number
                 // outdated
-                free(it->buf);
+                free(it->buf);  // free its associated storage to avoid memory leak
                 it = reply_window_[clt_nonce].erase(it);
             }
         }
         
-        printf("position 6 clt %u xid = %u xid_rep = %u after update window\n", clt_nonce, xid,xid_rep);
-
-        // printf("clt %u xid = %u in before NEW\n",clt_nonce, xid);
         return NEW;
 }
 
@@ -761,7 +741,9 @@ rpcs::add_reply(unsigned int clt_nonce, unsigned int xid,
 		char *b, int sz)
 {
 	ScopedLock rwl(&reply_window_m_);
-        // push new reply on the front of the list.
+
+        // update the record in our reply_window_
+        // malloc new memeory to store our returned buffer, and its size
         std::list<reply_t>::iterator it;
         for(it = reply_window_[clt_nonce].begin(); it != reply_window_[clt_nonce].end(); it++) {
             if(xid == it->xid) {

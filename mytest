@@ -13,6 +13,10 @@ echo "AT MOST ONCE"
 killall lock_tester
 killall lock_server
 
+export RPC_LOSSY=0
+killall lock_tester
+killall lock_server
+
 export RPC_LOSSY=5
 ./lock_server 3001 &
 ./lock_tester 3001

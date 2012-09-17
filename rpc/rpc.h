@@ -298,6 +298,8 @@ class rpcs : public chanmgr {
 	// per client that that client hasn't acknowledged receiving yet.
         // indexed by client nonce.
 	std::map<unsigned int, std::list<reply_t> > reply_window_;
+        // provide at most once semantics by maintaining a map between client
+        // and its largest ackownledged number.
         std::map<unsigned int, unsigned int> reply_max_ack_;
 
 
@@ -328,7 +330,7 @@ class rpcs : public chanmgr {
 	pthread_mutex_t count_m_;  //protect modification of counts
 	pthread_mutex_t reply_window_m_; // protect reply window et al
 	pthread_mutex_t conss_m_; // protect conns_
-        pthread_mutex_t reply_max_ack_m_; 
+        pthread_mutex_t reply_max_ack_m_; // protect reply_max_ack_
 
 	protected:
 
