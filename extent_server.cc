@@ -14,12 +14,15 @@ extent_server::extent_server() {}
 int extent_server::put(extent_protocol::extentid_t id, std::string buf, int &)
 {
   // You fill this in for Lab 2.
+  // TODO: set attribute ctime and mtime to time()
   return extent_protocol::IOERR;
 }
 
 int extent_server::get(extent_protocol::extentid_t id, std::string &buf)
 {
   // You fill this in for Lab 2.
+  //
+  // TODO: set attribute atime to time()
   return extent_protocol::IOERR;
 }
 
