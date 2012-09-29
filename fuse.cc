@@ -126,9 +126,15 @@ fuseserver_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
     printf("   fuseserver_setattr set size to %zu\n", attr->st_size);
     struct stat st;
     // You fill this in for Lab 2
-#if 0
+#if 1
     // Change the above line to "#if 1", and your code goes here
     // Note: fill st using getattr before fuse_reply_attr
+
+    // TODO: set new attribute, attr->st_size
+	//       if the new size is bigger than the current file size,
+	//       fill the new bytes with '\0'
+    	
+	getattr(yfs_client::inum(ino), st);
     fuse_reply_attr(req, &st, 0);
 #else
     fuse_reply_err(req, ENOSYS);
@@ -215,12 +221,23 @@ yfs_client::status
 fuseserver_createhelper(fuse_ino_t parent, const char *name,
                         mode_t mode, struct fuse_entry_param *e)
 {
+  yfs_client::status ret = NOENT;
   // In yfs, timeouts are always set to 0.0, and generations are always set to 0
   e->attr_timeout = 0.0;
   e->entry_timeout = 0.0;
   e->generation = 0;
   // You fill this in for Lab 2
-  return yfs_client::NOENT;
+  // TODO: check whether or not a file named name has already exist
+  //       if so, return EXIST
+  // if() { return yfs_client::EXIST; } 
+
+  // TODO: pick up an ino for file name set the 32nd bit to 1
+  srand(time(NULL));
+  yfs_client::inum ino = rand();
+
+  // TODO: Create an empty extent for ino.
+  
+  return ret;
 }
 
 void

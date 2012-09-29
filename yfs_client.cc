@@ -48,6 +48,21 @@ yfs_client::isdir(inum inum)
 }
 
 int
+yfs_client::create(inum inum)
+{
+  int r = OK;
+
+  printf("create %016llx\n", inum);
+
+  if (ec->put(inum, filename(inum)) != extent_protocol::OK) {
+    r = IOERR;
+  }
+
+  return r;
+}
+
+
+int
 yfs_client::getfile(inum inum, fileinfo &fin)
 {
   int r = OK;
