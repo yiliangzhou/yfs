@@ -30,7 +30,7 @@ extent_server::~extent_server() {
     // TODO: answer the following question
     // will std::map free its data correctly?
     // pthread_mutex_destory(&mutex_id_2_content);
-    pthread_mutex_destory(&mutex_g);	
+    pthread_mutex_destroy(&mutex_g);	
     for(ExtentMap::iterator it = id_2_content.begin(); it != id_2_content.end();
 	    it++) {
         delete it->second;
@@ -46,7 +46,7 @@ int extent_server::put(extent_protocol::extentid_t id, std::string buf, int &)
 
   // TODO: understand reference and pointer in c++
   // TODO: set attribute ctime and mtime to time()
-  unsigned int seconds = unsigned int(time(NULL));
+  unsigned int seconds = (unsigned int)time(NULL);
   extent_protocol::attr attribute;
   attribute.mtime = seconds;
   attribute.ctime = seconds;
@@ -60,7 +60,7 @@ int extent_server::put(extent_protocol::extentid_t id, std::string buf, int &)
     id_2_content.insert(ExtentMap::value_type(id, ptr_content));
   }else{
     // an old extent being updated
-    Content &content = id_2_content[id];
+    Content &content = * id_2_content[id];
 
     content.buf_ = buf;
     content.attribute_.mtime = seconds;
@@ -85,7 +85,7 @@ int extent_server::get(extent_protocol::extentid_t id, std::string &buf)
     // what's the behavior of default assignment
     buf = id_2_content[id]->buf_;
     // TODO: set attribute atime to time()
-    id_2_content[id]->attribute_.atime = unsigned int(time());
+    id_2_content[id]->attribute_.atime = (unsigned int)time(NULL);
   } 
 
   return ret;
@@ -122,7 +122,7 @@ int extent_server::remove(extent_protocol::extentid_t id, int &)
     ret = extent_protocol::IOERR;
   }else{
     // release memory
-    delete id_2_content[id]
+    delete id_2_content[id];
     id_2_content.erase(id);
   }
 

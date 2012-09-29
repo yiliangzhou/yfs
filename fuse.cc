@@ -221,7 +221,7 @@ yfs_client::status
 fuseserver_createhelper(fuse_ino_t parent, const char *name,
                         mode_t mode, struct fuse_entry_param *e)
 {
-  yfs_client::status ret = NOENT;
+  yfs_client::status ret = yfs_client::NOENT;
   // In yfs, timeouts are always set to 0.0, and generations are always set to 0
   e->attr_timeout = 0.0;
   e->entry_timeout = 0.0;
