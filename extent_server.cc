@@ -77,7 +77,6 @@ int extent_server::get(extent_protocol::extentid_t id, std::string &buf)
   // TODO: what if i write string str = "hello";  buf = str; 
   ScopedLock ml(&mutex_g);
   int ret = extent_protocol::OK;
-
   
   if(id_2_content.find(id) == id_2_content.end()) {
     ret = extent_protocol::NOENT;

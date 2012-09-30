@@ -16,25 +16,23 @@ class extent_server {
   typedef struct Content{
    std::string buf_;
    extent_protocol::attr attribute_;
-
    // TODO: add the struct's constructor and destructor
    Content(std::string buf, extent_protocol::attr attribute) : 
        buf_(buf), attribute_(attribute) {}
- 
   }Content, *pContent;
 
   typedef std::map<extent_protocol::extentid_t, pContent> ExtentMap;
   // data structure to store mapping from id to string and attributes
   ExtentMap id_2_content;
  
-  typedef struct DirEntry {
-    std::string name;
-	extent_protocol::extentid_t id;
-  }DirEntry, *pDirEntry;
+  //typedef struct DirEntry {
+    //std::string name;
+//	extent_protocol::extentid_t id;
+  //}DirEntry, *pDirEntry;
   // data structure to store mapping from dirctory_id to entries
-  typedef std::set<pDirEntry> DirEntries, *pDirEntries;
-  typedef std::map<extent_protocol::extentid_t, DirEntries> DirMap;
-  DirMap id_2_dir_entries;
+//  typedef std::set<pDirEntry> DirEntries, *pDirEntries;
+  //typedef std::map<extent_protocol::extentid_t, DirEntries> DirMap;
+  //DirMap id_2_dir_entries;
   // mutex to protect access to id_2_content
   // pthread_mutex_t mutex_id_2_content;
   pthread_mutex_t mutex_g;

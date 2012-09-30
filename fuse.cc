@@ -221,22 +221,26 @@ yfs_client::status
 fuseserver_createhelper(fuse_ino_t parent, const char *name,
                         mode_t mode, struct fuse_entry_param *e)
 {
-  yfs_client::status ret = yfs_client::NOENT;
+  yfs_client::status ret = yfs_client::OK;
   // In yfs, timeouts are always set to 0.0, and generations are always set to 0
   e->attr_timeout = 0.0;
   e->entry_timeout = 0.0;
   e->generation = 0;
+
   // You fill this in for Lab 2
-  // TODO: check whether or not a file named name has already exist
-  //       if so, return EXIST
-  // if() { return yfs_client::EXIST; } 
-
-  // TODO: pick up an ino for file name set the 32nd bit to 1
-  srand(time(NULL));
-  yfs_client::inum ino = rand();
-
-  // TODO: Create an empty extent for ino.
+  yfs_client::inum inum;
+  if((ret = yfs->create(parent, name, inum))!= yfs_client::OK) {
+    return ret;
+  }
   
+  // update e using new attribute and inum;
+  struct stat st;
+  if((ret = getattr(inum, st)) != yfs_client::OK) {
+    return ret;
+  }   
+  e->ino = inum;
+  e->attr = st;
+
   return ret;
 }
 
@@ -249,11 +253,11 @@ fuseserver_create(fuse_req_t req, fuse_ino_t parent, const char *name,
   if( (ret = fuseserver_createhelper( parent, name, mode, &e )) == yfs_client::OK ) {
     fuse_reply_create(req, &e, fi);
   } else {
-		if (ret == yfs_client::EXIST) {
-			fuse_reply_err(req, EEXIST);
-		}else{
-			fuse_reply_err(req, ENOENT);
-		}
+    if (ret == yfs_client::EXIST) {
+      fuse_reply_err(req, EEXIST);
+    }else{
+      fuse_reply_err(req, ENOENT);
+    }
   }
 }
 
