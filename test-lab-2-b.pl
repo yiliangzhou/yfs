@@ -100,9 +100,14 @@ sub writeone {
     while(length($contents) < $len){
 	$contents .= rand();
     }
+    
+
     $contents = substr($contents, 0, $len);
     $files->{$name} = $contents;
-
+  
+     
+    print length($files->{$name}); 
+    
     syswrite F, $files->{$name}, length($files->{$name}) 
 	or die "cannot write to $f";
     close(F);

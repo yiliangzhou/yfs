@@ -148,7 +148,8 @@ yfs_client::write(inum file_inum, size_t size, off_t offset, const std::string &
     return IOERR;
   }
 
-  std::cout<<"buff to write in yfs_client: "<<new_data;
+  std::cout<<"buff to write in yfs_client, size is: "<<new_data.size()
+           <<" and "<<new_data<<std::endl;
   return r;
 }
 
