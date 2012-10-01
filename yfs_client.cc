@@ -14,25 +14,28 @@
 yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
 {
   ec = new extent_client(extent_dst);
-  //  lc = new lock_client(lock_dst);
+
+  // do not consider concurrency at this point.
+  // lc = new lock_client(lock_dst);
+
   srand((unsigned)time(NULL));
-  // unsigned long long N = 4294967296;
+
+  // make sure root directory, with inum = 0x00000001,
+  // is ready to be queried.
   load_root(ec); 
 }
 
 void yfs_client::load_root(extent_client *ec) {
-  // check if directory 0x00000001 exist
   inum inum = 0x00000001;
   dirinfo din;
   
+  // check if directory 0x00000001 exist
   // if not exist, create one
   if(getdir(inum, din) != OK) {
     std::string buf;      // empty directory
     ec->put(inum, buf);
-    std::cout<<"create root\n";
   }
 
-  // otherwise, do nothing and return 
 }
 
 yfs_client::inum
@@ -127,35 +130,27 @@ yfs_client::write(inum file_inum, size_t size, off_t offset, const std::string &
 
   std::string new_data;  
   if(offset < old_data.size()) {
-    // new_data = 2 parts;
+    // overwrite old data.
     new_data = old_data.substr(0, offset);
-    // 
-    std::cout<<"Dead here"<<std::endl;
     new_data.append(buf);
     
     // in case offset + size < old_data.size()
     if(offset + size < old_data.size()) {
-     std::cout<<"Dead here"<<std::endl;
-    
       // append the tail of old data to new data.
       new_data.append(old_data.substr(offset + size));
     }
   }else{ 
-// otherwise append null '\0' character to fill the gap, could be zero
-	  std::cout<<"Dead here"<<std::endl;
-	  // when offset = tmp_buf.size()
-	  new_data = old_data;
-	  new_data.append(offset-old_data.size(), '\0');
-	  new_data.append(buf);
-	  std::cout<<"Dead here"<<std::endl;
+    // otherwise append null '\0' character to fill the gap, could be zero
+    // when offset = tmp_buf.size()
+    new_data = old_data;
+    new_data.append(offset-old_data.size(), '\0');
+    new_data.append(buf);
   }
 
   if(extent_protocol::OK != ec->put(file_inum, new_data)) {
     return IOERR;
   }
 
-  std::cout<<"buff to write in yfs_client, size is: "<<new_data.size()
-           <<" and "<<new_data<<std::endl;
   return r;
 }
 
@@ -169,7 +164,8 @@ yfs_client::read(inum file_inum, size_t size, off_t offset, std::string &buf) {
     return IOERR;
   }
   
-  // should I consider the logic here? 
+  // TODO: should I consider this situation?
+  // Should i assume this duty here.
   if(offset >= tmp_buf.size()) {
     return OK;
   }
@@ -199,7 +195,7 @@ yfs_client::read_dirents(inum directory_inum, std::vector<dirent> &ents) {
 bool
 yfs_client::exist(inum parent_inum, const char* name, inum & inum) {
 
-// retrieve content of parent_inum, search if name appears
+  // retrieve content of parent_inum, search if name appears
   std::string buf;
   if(extent_protocol::OK != ec->get(parent_inum, buf)) {
     return false;
@@ -225,7 +221,6 @@ yfs_client::create(inum parent_inum, const char* name, inum &inum)
   // under parent directory  
   if(exist(parent_inum, name, inum)) { 
     r = EXIST; 
-    // goto release;
     return r;
   }
   
@@ -249,7 +244,6 @@ yfs_client::create(inum parent_inum, const char* name, inum &inum)
   buf.append(";");
   if(ec->put(parent_inum, buf) != extent_protocol::OK) {
     r = IOERR;
-    // goto release;
     return r;
   }
   

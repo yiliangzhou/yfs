@@ -127,10 +127,6 @@ fuseserver_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
     struct stat st;
     // You fill this in for Lab 2
 #if 1
-    // Change the above line to "#if 1", and your code goes here
-    // Note: fill st using getattr before fuse_reply_attr
-
-    // TODO: set new attribute, attr->st_size
     if(yfs_client::OK != yfs->set_attr_size(yfs_client::inum(ino), attr->st_size)) {
         fuse_reply_err(req, ENOSYS);
     }
@@ -164,7 +160,7 @@ fuseserver_read(fuse_req_t req, fuse_ino_t ino, size_t size,
   // You fill this in for Lab 2
 #if 1
   std::string buf;
-  // Change the above "#if 0" to "#if 1", and your code goes here
+
   if(yfs_client::OK != yfs->read(ino, size, off, buf)) {
     fuse_reply_err(req, ENOSYS);
   }
@@ -197,10 +193,8 @@ fuseserver_write(fuse_req_t req, fuse_ino_t ino,
 {
   // You fill this in for Lab 2
 #if 1
+  // REMEMBER: buf's length is not equal to size.
   std::string buf_str(buf, size);
-//   std::cout<<"size of buf by strlen() "<<strlen(buf)<<std::endl;
-  std::cout<<"buff to be write for "<<ino<<" off is "<<off
-           <<" size is "<<size<<" and buf is "<<buf_str<<std::endl;
   if(yfs_client::OK != yfs->write(ino, size, off, buf_str)) {
     fuse_reply_err(req, ENOSYS);
   }
@@ -239,7 +233,6 @@ fuseserver_createhelper(fuse_ino_t parent, const char *name,
   e->entry_timeout = 0.0;
   e->generation = 0;
 
-  // You fill this in for Lab 2
   yfs_client::inum inum;
   if((ret = yfs->create(parent, name, inum))!= yfs_client::OK) {
     return ret;
@@ -303,8 +296,6 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
   e.generation = 0;
   bool found = false;
 
-  // You fill this in for Lab 2
-  // inum and attr
   yfs_client::inum inum;
   if(yfs->exist(parent, name, inum)) {
     struct stat st;
@@ -379,7 +370,7 @@ fuseserver_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
   if(yfs->read_dirents(inum, ents) == yfs_client::OK) {
     for(std::vector<yfs_client::dirent>::iterator it = ents.begin(); 
         it != ents.end(); it++) {
-        std::cout<<(*it).name.c_str()<<" added;"<<std::endl;
+        // add reply
         dirbuf_add(&b, (*it).name.c_str(), (fuse_ino_t) (*it).inum);
     }
   }
