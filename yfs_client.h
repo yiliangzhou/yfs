@@ -46,9 +46,10 @@ class yfs_client {
   bool isdir(inum);
 
   // to determined if any file name already exist. 
-  bool exist(inum, const char*);
+  bool exist(inum, const char*, inum &);
   int create(inum, const char*, inum &);
-
+  int read_dirents(inum, std::vector<dirent>&);
+ 
   int getfile(inum, fileinfo &);
   int getdir(inum, dirinfo &);
 };

@@ -126,15 +126,14 @@ fuseserver_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
     printf("   fuseserver_setattr set size to %zu\n", attr->st_size);
     struct stat st;
     // You fill this in for Lab 2
-#if 1
+#if 0
     // Change the above line to "#if 1", and your code goes here
     // Note: fill st using getattr before fuse_reply_attr
 
     // TODO: set new attribute, attr->st_size
 	//       if the new size is bigger than the current file size,
 	//       fill the new bytes with '\0'
-    	
-	getattr(yfs_client::inum(ino), st);
+    getattr(yfs_client::inum(ino), st);
     fuse_reply_attr(req, &st, 0);
 #else
     fuse_reply_err(req, ENOSYS);
@@ -240,7 +239,7 @@ fuseserver_createhelper(fuse_ino_t parent, const char *name,
   }   
   e->ino = inum;
   e->attr = st;
-
+ 
   return ret;
 }
 
@@ -292,6 +291,17 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
   bool found = false;
 
   // You fill this in for Lab 2
+  // inum and attr
+  yfs_client::inum inum;
+  if(yfs->exist(parent, name, inum)) {
+    struct stat st;
+    getattr(inum, st);
+    e.attr = st;
+    e.ino = inum;
+    found = true;
+  }else{
+    found = false;
+  } 
   if (found)
     fuse_reply_entry(req, &e);
   else
@@ -348,12 +358,18 @@ fuseserver_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
     fuse_reply_err(req, ENOTDIR);
     return;
   }
-
+  std::cout<<"begin read dir ino = "<<inum<<std::endl;
   memset(&b, 0, sizeof(b));
 
-
   // You fill this in for Lab 2
-
+  std::vector<yfs_client::dirent> ents;
+  if(yfs->read_dirents(inum, ents) == yfs_client::OK) {
+    for(std::vector<yfs_client::dirent>::iterator it = ents.begin(); 
+        it != ents.end(); it++) {
+        std::cout<<(*it).name.c_str()<<" added;"<<std::endl;
+        dirbuf_add(&b, (*it).name.c_str(), (fuse_ino_t) (*it).inum);
+    }
+  }
 
   reply_buf_limited(req, b.p, b.size, off, size);
   free(b.p);

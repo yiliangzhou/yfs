@@ -9,7 +9,7 @@
 #include <fcntl.h>
 #include <time.h>
 #include <rpc/slock.h>
-
+#include <new>
 /*
     TODO: try this later
     #include <memory>
@@ -56,8 +56,10 @@ int extent_server::put(extent_protocol::extentid_t id, std::string buf, int &)
 
   // a new file or an old extent
   if(id_2_content.find(id) == id_2_content.end()) {
-    Content *ptr_content = new Content(buf, attribute);
-    id_2_content.insert(ExtentMap::value_type(id, ptr_content));
+     std::cout<<"ID:"<<id<<std::endl;
+     std::cout<<"In extent server,new file's content is:"<<buf<<std::endl;
+     Content *ptr_content = new Content(buf, attribute);
+     id_2_content.insert(ExtentMap::value_type(id, ptr_content));
   }else{
     // an old extent being updated
     Content &content = * id_2_content[id];
@@ -86,7 +88,8 @@ int extent_server::get(extent_protocol::extentid_t id, std::string &buf)
     // TODO: set attribute atime to time()
     id_2_content[id]->attribute_.atime = (unsigned int)time(NULL);
   } 
-
+  
+ 
   return ret;
 }
 
@@ -109,7 +112,7 @@ int extent_server::getattr(extent_protocol::extentid_t id, extent_protocol::attr
     a.mtime = attr.mtime;
     a.ctime = attr.ctime;
   }
-  return extent_protocol::OK;
+  return ret;
 }
 
 int extent_server::remove(extent_protocol::extentid_t id, int &)
