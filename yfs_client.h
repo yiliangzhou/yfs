@@ -49,6 +49,9 @@ class yfs_client {
   bool exist(inum, const char*, inum &);
   int create(inum, const char*, inum &);
   int read_dirents(inum, std::vector<dirent>&);
+  int set_attr_size(inum, unsigned int);
+  int read(inum, size_t, off_t, std::string &);
+  int write(inum, size_t, off_t, const std::string &);
  
   int getfile(inum, fileinfo &);
   int getdir(inum, dirinfo &);

@@ -126,13 +126,15 @@ fuseserver_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
     printf("   fuseserver_setattr set size to %zu\n", attr->st_size);
     struct stat st;
     // You fill this in for Lab 2
-#if 0
+#if 1
     // Change the above line to "#if 1", and your code goes here
     // Note: fill st using getattr before fuse_reply_attr
 
     // TODO: set new attribute, attr->st_size
-	//       if the new size is bigger than the current file size,
-	//       fill the new bytes with '\0'
+    if(yfs_client::OK != yfs->set_attr_size(yfs_client::inum(ino), attr->st_size)) {
+        fuse_reply_err(req, ENOSYS);
+    }
+
     getattr(yfs_client::inum(ino), st);
     fuse_reply_attr(req, &st, 0);
 #else
@@ -160,9 +162,13 @@ fuseserver_read(fuse_req_t req, fuse_ino_t ino, size_t size,
                 off_t off, struct fuse_file_info *fi)
 {
   // You fill this in for Lab 2
-#if 0
+#if 1
   std::string buf;
   // Change the above "#if 0" to "#if 1", and your code goes here
+  if(yfs_client::OK != yfs->read(ino, size, off, buf)) {
+    fuse_reply_err(req, ENOSYS);
+  }
+
   fuse_reply_buf(req, buf.data(), buf.size());
 #else
   fuse_reply_err(req, ENOSYS);
@@ -190,8 +196,13 @@ fuseserver_write(fuse_req_t req, fuse_ino_t ino,
                  struct fuse_file_info *fi)
 {
   // You fill this in for Lab 2
-#if 0
-  // Change the above line to "#if 1", and your code goes here
+#if 1
+  std::string buf_str(buf);
+  std::cout<<"buff to be write for "<<ino<<" "<<buf_str;
+  if(yfs_client::OK != yfs->write(ino, size, off, buf_str)) {
+    fuse_reply_err(req, ENOSYS);
+  }
+
   fuse_reply_write(req, size);
 #else
   fuse_reply_err(req, ENOSYS);

@@ -57,7 +57,7 @@ int extent_server::put(extent_protocol::extentid_t id, std::string buf, int &)
   // a new file or an old extent
   if(id_2_content.find(id) == id_2_content.end()) {
      std::cout<<"ID:"<<id<<std::endl;
-     std::cout<<"In extent server,new file's content is:"<<buf<<std::endl;
+     std::cout<<"In extent server, new file's content is:"<<buf.size()<<" and "<<buf<<std::endl;
      Content *ptr_content = new Content(buf, attribute);
      id_2_content.insert(ExtentMap::value_type(id, ptr_content));
   }else{
@@ -65,6 +65,7 @@ int extent_server::put(extent_protocol::extentid_t id, std::string buf, int &)
     Content &content = * id_2_content[id];
 
     content.buf_ = buf;
+    std::cout<<"overwriting old file, size is "<<buf.size()<<" and "<<content.buf_<<std::endl;
     content.attribute_.mtime = seconds;
     content.attribute_.ctime = seconds;
     content.attribute_.size = buf.size();

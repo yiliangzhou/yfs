@@ -82,6 +82,101 @@ std::vector<yfs_client::dirent> yfs_client::parse_dirents(const std::string &buf
   return ents;
 }
 
+int
+yfs_client::set_attr_size(inum file_inum, unsigned int new_size) {
+  int r = yfs_client::OK;
+
+  // get old attr and content
+  extent_protocol::attr a;
+  if(extent_protocol::OK != ec->getattr(file_inum, a)) {
+    return IOERR;
+  }
+  unsigned int old_size = a.size;
+
+  std::string buf;
+  if(extent_protocol::OK != ec->get(file_inum, buf)) {
+    return IOERR;
+  }
+
+  if(new_size >  old_size) {
+    // pading at end of buf with '\0'
+    buf.resize(new_size, '\0');
+  }else if(new_size < old_size) {
+    // truncate buf to new size
+    buf.resize(new_size);
+  }else {
+    // do nothing
+  }
+  
+  if(extent_protocol::OK != ec->put(file_inum, buf)) {
+    return IOERR;
+  } 
+
+  return r;
+} 
+
+int
+yfs_client::write(inum file_inum, size_t size, off_t offset, const std::string &buf) {
+  int r = OK;
+ 
+  // get old data before write 
+  std::string old_data;
+  if(extent_protocol::OK != ec->get(file_inum, old_data)) {
+    return IOERR;
+  }
+
+  std::string new_data;  
+  if(offset < old_data.size()) {
+    // new_data = 2 parts;
+    new_data = old_data.substr(0, offset);
+    new_data.append(buf);
+    
+    // in case offset + size < old_data.size()
+    if(offset + size < old_data.size()) {
+      // append the tail of old data to new data.
+      new_data.append(old_data.substr(offset + size));
+    }
+  }
+  
+  // otherwise append null '\0' character to fill the gap, could be zero
+  // when offset = tmp_buf.size()
+  new_data = old_data;
+  new_data.append(offset-old_data.size(), '\0');
+  new_data.append(buf);
+
+  if(extent_protocol::OK != ec->put(file_inum, new_data)) {
+    return IOERR;
+  }
+
+  std::cout<<"buff to write in yfs_client: "<<new_data;
+  return r;
+}
+
+
+int
+yfs_client::read(inum file_inum, size_t size, off_t offset, std::string &buf) {
+  int r = OK;
+  
+  std::string tmp_buf;
+  if(extent_protocol::OK != ec->get(file_inum, tmp_buf)) {
+    return IOERR;
+  }
+  
+  // should I consider the logic here? 
+  if(offset >= tmp_buf.size()) {
+    return OK;
+  }
+
+  // fetch requested sub string based on size and offset  
+  if(offset + size > tmp_buf.size()) {
+    buf = tmp_buf.substr(offset);
+  }else{
+    buf = tmp_buf.substr(offset, size);
+  }
+  
+  return r;
+}
+
 int 
 yfs_client::read_dirents(inum directory_inum, std::vector<dirent> &ents) {
   int r = OK;
