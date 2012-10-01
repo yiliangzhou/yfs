@@ -197,8 +197,8 @@ fuseserver_write(fuse_req_t req, fuse_ino_t ino,
 {
   // You fill this in for Lab 2
 #if 1
-  std::string buf_str;
-  buf_str.append(buf);
+  std::string buf_str(buf, size);
+//   std::cout<<"size of buf by strlen() "<<strlen(buf)<<std::endl;
   std::cout<<"buff to be write for "<<ino<<" off is "<<off
            <<" size is "<<size<<" and buf is "<<buf_str<<std::endl;
   if(yfs_client::OK != yfs->write(ino, size, off, buf_str)) {

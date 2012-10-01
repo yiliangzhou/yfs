@@ -129,20 +129,26 @@ yfs_client::write(inum file_inum, size_t size, off_t offset, const std::string &
   if(offset < old_data.size()) {
     // new_data = 2 parts;
     new_data = old_data.substr(0, offset);
+    // 
+    std::cout<<"Dead here"<<std::endl;
     new_data.append(buf);
     
     // in case offset + size < old_data.size()
     if(offset + size < old_data.size()) {
+     std::cout<<"Dead here"<<std::endl;
+    
       // append the tail of old data to new data.
       new_data.append(old_data.substr(offset + size));
     }
+  }else{ 
+// otherwise append null '\0' character to fill the gap, could be zero
+	  std::cout<<"Dead here"<<std::endl;
+	  // when offset = tmp_buf.size()
+	  new_data = old_data;
+	  new_data.append(offset-old_data.size(), '\0');
+	  new_data.append(buf);
+	  std::cout<<"Dead here"<<std::endl;
   }
-  
-  // otherwise append null '\0' character to fill the gap, could be zero
-  // when offset = tmp_buf.size()
-  new_data = old_data;
-  new_data.append(offset-old_data.size(), '\0');
-  new_data.append(buf);
 
   if(extent_protocol::OK != ec->put(file_inum, new_data)) {
     return IOERR;
