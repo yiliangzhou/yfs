@@ -105,13 +105,15 @@ int extent_server::remove(extent_protocol::extentid_t id, int &)
 {
   ScopedLock ml(&mutex_g);
   int ret = extent_protocol::OK;
-
-  if(id_2_content.find(id) == id_2_content.end()) {
-    ret = extent_protocol::IOERR;
+  
+  ExtentMap::iterator it = id_2_content.find(id);
+  if(it == id_2_content.end()) {
+    ret = extent_protocol::NOENT;
   }else{
     // release memory
-    delete id_2_content[id];
-    id_2_content.erase(id);
+    id_2_content.erase(it);
+    // delete id_2_content[id];
+    // id_2_content.erase(id);
   }
 
   return ret;

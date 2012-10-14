@@ -86,6 +86,18 @@ std::vector<yfs_client::dirent> yfs_client::parse_dirents(const std::string &buf
   return ents;
 }
 
+
+std::string yfs_client::dirents_to_string(std::vector<yfs_client::dirent> & ents) {
+  std::ostringstream os;
+  
+  std::vector<dirent>::iterator it = ents.begin();
+  while(it != ents.end()){
+    os <<(*it).name<<","<<(*it).inum<<";";
+  }
+  
+  return os.str();
+}
+
 int
 yfs_client::set_attr_size(inum file_inum, unsigned int new_size) {
   int r = yfs_client::OK;
@@ -214,7 +226,7 @@ yfs_client::exist(inum parent_inum, const char* name, inum & inum) {
 }
 
 int
-yfs_client::create(inum parent_inum, const char* name, inum &inum)
+yfs_client::create(inum parent_inum, const char* name, inum &inum, int file_or_dir)
 {
   int r = OK;
 
@@ -224,10 +236,20 @@ yfs_client::create(inum parent_inum, const char* name, inum &inum)
     r = EXIST; 
     return r;
   }
-  
-   // Pick up an ino for file name set the 32nd bit to 1
+   
+  // Pick up an ino for new file/dir
   unsigned long long rnd = rand();
-  inum = rnd | 0x80000000; // set the 32nd bit to 1
+  switch (file_or_dir) {
+    case FILE_:
+      inum = rnd | 0x80000000; // set the 32nd bit to 1
+      break;
+    case DIR_:
+      inum = rnd & ~ (1<<31); // set the 32nd bit to 0
+      break;
+    default:
+      inum = rnd | (1<<31);
+      break;         
+  }
 
   // Create an empty extent for ino. 
   std::string empty_str;
@@ -250,6 +272,67 @@ yfs_client::create(inum parent_inum, const char* name, inum &inum)
   
   return r;
 }
+
+
+// this will create an empty file  under directory indicated
+// by parent_inum.
+// will return EXIST if a file or directory with the same name
+// already exist.
+int
+yfs_client::create_file(inum parent_inum, const char* name, inum & inum) {
+  int r = OK;
+  r = create(parent_inum, name, inum, FILE_);
+  return r;
+}
+
+// this will create a empty directory under directory indicated
+// by parent_inum.
+// will return EXIST if a file or directory with the same name
+// already exist.
+int
+yfs_client::mkdir(inum parent_inum, const char* name, inum & inum) {
+  int r = OK;
+  r = create(parent_inum, name, inum, DIR_);
+  return r;
+}
+
+int
+yfs_client::unlink(inum parent_inum, const char* name)
+{
+  int r = OK;
+
+  // Check if this file does exist.
+  inum inum;
+  if(exist(parent_inum, name, inum) && isfile(inum)) { 
+    // file exist
+    // 1. remove a dirent from the directory
+    std::vector<dirent> ents;
+    read_dirents(parent_inum, ents);
+    std::vector<dirent>::iterator it = ents.begin();
+    while(it != ents.end()) {
+      if((*it).inum == inum) { ents.erase(it); break; }
+    } // updated ents 
+    std::string buf = dirents_to_string(ents);
+    // write back new extent of the directory
+    if(ec->put(parent_inum, buf) != extent_protocol::OK) {
+      return IOERR;
+    }
+
+    // 2. delete extent of a file
+    if(ec->remove(inum) != extent_protocol::OK) {
+      return IOERR;
+    }
+
+  }else{
+    // no entry with the name is found under directory,
+    // or a directory entry is found under directory.
+    // we are not allowed to unlink a directory. 
+    return NOENT; 
+  }
+  
+  return r;
+}
+
 
 int
 yfs_client::getfile(inum inum, fileinfo &fin)
