@@ -2,13 +2,28 @@
 #define yfs_client_h
 
 #include <string>
-//#include "yfs_protocol.h"
+// #include "yfs_protocol.h"
 #include "extent_client.h"
 #include "lock_client.h"
 #include <vector>
 
 #include "lock_protocol.h"
 #include "lock_client.h"
+
+class scoped_lock_ {
+  lock_client *lc;
+  lock_protocol::lockid_t id; 
+ public:
+  scoped_lock_(lock_client *lc, lock_protocol::lockid_t id):
+              lc(lc), id(id) {
+    lc->acquire(id);
+  }
+
+  ~scoped_lock_() { 
+    lc->release(id);
+  }
+};
+
 
 class yfs_client {
   extent_client *ec;
@@ -44,6 +59,10 @@ class yfs_client {
   std::vector<dirent> parse_dirents(const std::string &buf);
   std::string dirents_to_string(std::vector<dirent> &);
   void load_root(extent_client *);
+
+  bool exist_(inum, const char*, inum &);
+  int read_dirents_(inum, std::vector<dirent> &);
+ 
  public:
 
   yfs_client(std::string, std::string);

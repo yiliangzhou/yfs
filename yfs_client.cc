@@ -30,6 +30,9 @@ void yfs_client::load_root(extent_client *ec) {
   inum inum = 0x00000001;
   dirinfo din;
   
+  // acquire lock for root inum
+  // lc->acquire(inum);
+  scoped_lock_ lock(lc, inum);
   // check if directory 0x00000001 exist
   // if not exist, create one
   if(getdir(inum, din) != OK) {
@@ -37,6 +40,8 @@ void yfs_client::load_root(extent_client *ec) {
     ec->put(inum, buf);
   }
 
+  // release lock for root inum
+  // lc->release(inum);
 }
 
 yfs_client::inum
@@ -102,16 +107,22 @@ std::string yfs_client::dirents_to_string(std::vector<yfs_client::dirent> & ents
 int
 yfs_client::set_attr_size(inum file_inum, unsigned int new_size) {
   int r = yfs_client::OK;
+  
+  // request a lock on file_inum
+  // lc->acquire(file_inum);
+  scoped_lock_ lock(lc, file_inum);
 
   // get old attr and content
   extent_protocol::attr a;
   if(extent_protocol::OK != ec->getattr(file_inum, a)) {
+    // lc->release(file_inum);
     return IOERR;
   }
   unsigned int old_size = a.size;
 
   std::string buf;
   if(extent_protocol::OK != ec->get(file_inum, buf)) {
+    // lc->release(file_inum);
     return IOERR;
   }
 
@@ -126,16 +137,18 @@ yfs_client::set_attr_size(inum file_inum, unsigned int new_size) {
   }
   
   if(extent_protocol::OK != ec->put(file_inum, buf)) {
+    // lc->release(file_inum);
     return IOERR;
   } 
-
+  
+  // lc->release(file_inum);
   return r;
 } 
 
 int
 yfs_client::write(inum file_inum, size_t size, off_t offset, const std::string &buf) {
   int r = OK;
- 
+  scoped_lock_ lock(lc, file_inum); 
   // get old data before write 
   std::string old_data;
   if(extent_protocol::OK != ec->get(file_inum, old_data)) {
@@ -172,7 +185,8 @@ yfs_client::write(inum file_inum, size_t size, off_t offset, const std::string &
 int
 yfs_client::read(inum file_inum, size_t size, off_t offset, std::string &buf) {
   int r = OK;
-  
+  scoped_lock_ lock(lc, file_inum);
+ 
   std::string tmp_buf;
   if(extent_protocol::OK != ec->get(file_inum, tmp_buf)) {
     return IOERR;
@@ -194,8 +208,10 @@ yfs_client::read(inum file_inum, size_t size, off_t offset, std::string &buf) {
   return r;
 }
 
+
+// unlocked-version read_dirents()
 int 
-yfs_client::read_dirents(inum directory_inum, std::vector<dirent> &ents) {
+yfs_client::read_dirents_(inum directory_inum, std::vector<dirent> &ents) {
   int r = OK;
   std::string buf;
   if(extent_protocol::OK != ec->get(directory_inum, buf)) {
@@ -205,6 +221,42 @@ yfs_client::read_dirents(inum directory_inum, std::vector<dirent> &ents) {
   ents = parse_dirents(buf);
   return r;
 }
+
+
+int 
+yfs_client::read_dirents(inum directory_inum, std::vector<dirent> &ents) {
+  int r = OK;
+  scoped_lock_ lock(lc, directory_inum);
+  std::string buf;
+  if(extent_protocol::OK != ec->get(directory_inum, buf)) {
+    return IOERR;
+  }
+
+  ents = parse_dirents(buf);
+  return r;
+}
+
+
+// unlocked-version exist()
+bool
+yfs_client::exist_(inum parent_inum, const char* name, inum & inum) {
+   // retrieve content of parent_inum, search if name appears
+  std::string buf;
+  if(extent_protocol::OK != ec->get(parent_inum, buf)) {
+    return false;
+  }
+  std::vector<dirent> ents = parse_dirents(buf);
+   
+  for(std::vector<dirent>::iterator it = ents.begin(); it != ents.end(); it++) {
+    if(0 == (*it).name.compare(name)) {
+      inum = (*it).inum; 
+      return true;
+    }
+  }
+    
+  return false;
+}
+ 
 
 bool
 yfs_client::exist(inum parent_inum, const char* name, inum & inum) {
@@ -282,6 +334,7 @@ yfs_client::create(inum parent_inum, const char* name, inum &inum, int file_or_d
 int
 yfs_client::create_file(inum parent_inum, const char* name, inum & inum) {
   int r = OK;
+  scoped_lock_ lock(lc, parent_inum);
   r = create(parent_inum, name, inum, FILE_);
   return r;
 }
@@ -293,6 +346,7 @@ yfs_client::create_file(inum parent_inum, const char* name, inum & inum) {
 int
 yfs_client::mkdir(inum parent_inum, const char* name, inum & inum) {
   int r = OK;
+  scoped_lock_ lock(lc, parent_inum);
   r = create(parent_inum, name, inum, DIR_);
   return r;
 }
@@ -301,14 +355,15 @@ int
 yfs_client::unlink(inum parent_inum, const char* name)
 {
   int r = OK;
-
+  scoped_lock_ lock(lc, parent_inum);
   // Check if this file does exist.
   inum inum;
-  if(exist(parent_inum, name, inum) && isfile(inum)) { 
+  if(exist_(parent_inum, name, inum) && isfile(inum)) { 
     // file exist
+    scoped_lock_ file_lock(lc, inum);
     // 1. remove a dirent from the directory
     std::vector<dirent> ents;
-    read_dirents(parent_inum, ents);
+    read_dirents_(parent_inum, ents);
     std::vector<dirent>::iterator it = ents.begin();
     while(it != ents.end()) {
       if((*it).inum == inum) { ents.erase(it); break; }
@@ -343,7 +398,7 @@ yfs_client::getfile(inum inum, fileinfo &fin)
   int r = OK;
   // You modify this function for Lab 3
   // - hold and release the file lock
-
+  scoped_lock_ lock(lc, inum);
   printf("getfile %016llx\n", inum);
   extent_protocol::attr a;
   if (ec->getattr(inum, a) != extent_protocol::OK) {
@@ -368,6 +423,7 @@ yfs_client::getdir(inum inum, dirinfo &din)
   int r = OK;
   // You modify this function for Lab 3
   // - hold and release the directory lock
+  scoped_lock_ lock(lc, inum);
 
   printf("getdir %016llx\n", inum);
   extent_protocol::attr a;
