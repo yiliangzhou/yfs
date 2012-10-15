@@ -62,7 +62,8 @@ class yfs_client {
 
   bool exist_(inum, const char*, inum &);
   int read_dirents_(inum, std::vector<dirent> &);
- 
+  int getdir_(inum, dirinfo &);
+
  public:
 
   yfs_client(std::string, std::string);

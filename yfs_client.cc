@@ -29,19 +29,14 @@ yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
 void yfs_client::load_root(extent_client *ec) {
   inum inum = 0x00000001;
   dirinfo din;
-  
-  // acquire lock for root inum
-  // lc->acquire(inum);
   scoped_lock_ lock(lc, inum);
   // check if directory 0x00000001 exist
   // if not exist, create one
-  if(getdir(inum, din) != OK) {
+  if(getdir_(inum, din) != OK) {
     std::string buf;      // empty directory
     ec->put(inum, buf);
   }
 
-  // release lock for root inum
-  // lc->release(inum);
 }
 
 yfs_client::inum
@@ -417,6 +412,27 @@ yfs_client::getfile(inum inum, fileinfo &fin)
   return r;
 }
 
+
+// unlocked-version getdir()
+int
+yfs_client::getdir_(inum inum, dirinfo &din)
+{
+  int r = OK;
+
+  printf("getdir %016llx\n", inum);
+  extent_protocol::attr a;
+  if (ec->getattr(inum, a) != extent_protocol::OK) {
+    r = IOERR;
+    goto release;
+  }
+  din.atime = a.atime;
+  din.mtime = a.mtime;
+  din.ctime = a.ctime;
+
+ release:
+  return r;
+}
+
 int
 yfs_client::getdir(inum inum, dirinfo &din)
 {
@@ -438,6 +454,5 @@ yfs_client::getdir(inum inum, dirinfo &din)
  release:
   return r;
 }
-
 
 
