@@ -15,10 +15,10 @@
 yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
 {
   ec = new extent_client(extent_dst);
-
-  // do not consider concurrency at this point.
-  // lc = new lock_client(lock_dst);
-
+  // to guard the extent server from breaking by concurrent operations 
+  lc = new lock_client(lock_dst);
+  
+  // use random seed
   srand((unsigned)time(NULL));
 
   // make sure root directory, with inum = 0x00000001,
@@ -93,6 +93,7 @@ std::string yfs_client::dirents_to_string(std::vector<yfs_client::dirent> & ents
   std::vector<dirent>::iterator it = ents.begin();
   while(it != ents.end()){
     os <<(*it).name<<","<<(*it).inum<<";";
+    it++;
   }
   
   return os.str();
@@ -311,6 +312,8 @@ yfs_client::unlink(inum parent_inum, const char* name)
     std::vector<dirent>::iterator it = ents.begin();
     while(it != ents.end()) {
       if((*it).inum == inum) { ents.erase(it); break; }
+      // otherwise increase the it
+      it++;
     } // updated ents 
     std::string buf = dirents_to_string(ents);
     // write back new extent of the directory
