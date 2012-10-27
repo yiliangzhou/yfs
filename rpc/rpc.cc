@@ -415,7 +415,7 @@ rpcs::rpcs(unsigned int p1, int count)
 	VERIFY(pthread_mutex_init(&count_m_, 0) == 0);
 	VERIFY(pthread_mutex_init(&reply_window_m_, 0) == 0);
 	VERIFY(pthread_mutex_init(&conss_m_, 0) == 0);
-
+        VERIFY(pthread_mutex_init(&reply_max_ack_m_,0) == 0);
 	set_rand_seed();
 	nonce_ = random();
 	jsl_log(JSL_DBG_2, "rpcs::rpcs created with nonce %d\n", nonce_);
@@ -556,6 +556,7 @@ rpcs::dispatch(djob_t *j)
 			// if we don't know about this clt_nonce, create a cleanup object
 			if(reply_window_.find(h.clt_nonce) == reply_window_.end()){
 				VERIFY (reply_window_[h.clt_nonce].size() == 0); // create
+                                reply_max_ack_[h.clt_nonce] = 0; // create and initialize
 				jsl_log(JSL_DBG_2,
 						"rpcs::dispatch: new client %u xid %d chan %d, total clients %d\n", 
 						h.clt_nonce, h.xid, c->channo(), (int)reply_window_.size());
@@ -629,7 +630,7 @@ rpcs::dispatch(djob_t *j)
 		case INPROGRESS: // server is working on this request
 			break;
 		case DONE: // duplicate and we still have the response
-			c->send(b1, sz1);
+                        c->send(b1, sz1);
 			break;
 		case FORGOTTEN: // very old request and we don't have the response anymore
 			jsl_log(JSL_DBG_2, "rpcs::dispatch: very old request %u from %u\n", 
@@ -661,9 +662,73 @@ rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
 		unsigned int xid_rep, char **b, int *sz)
 {
 	ScopedLock rwl(&reply_window_m_);
+        ScopedLock rma1(&reply_max_ack_m_);
 
-        // You fill this in for Lab 1.
-	return NEW;
+        std::list<reply_t>::iterator it;
+
+        // if this request has seen before, return the sotred value if it's valid
+        // return INPROGRESS if it's not valid.
+        for(it = reply_window_[clt_nonce].begin(); it != reply_window_[clt_nonce].end(); it++) {
+            // whether or not we have found the xid
+            if(xid == it->xid) {
+                // whether or not processed
+                if(true == it->cb_present) {
+                    // DONE
+                    (*b) = it->buf;
+                    (*sz) = it->sz;
+                    return DONE;
+                }else{
+                    // INPROGRESS
+                    return INPROGRESS;
+                }
+            }
+        } 
+
+        // can not find xid, either NEW or FORGOTTEN.
+	if((reply_window_[clt_nonce].size() != 0 && xid <= reply_max_ack_[clt_nonce])
+           || (reply_window_[clt_nonce].size() == 0 && xid_rep != 0)) {
+            // when the server is working normaly, here comes a very old request
+            // when the server just recovered, we are not sure about this new request
+            return FORGOTTEN;
+        } 
+
+
+        // a new request, construct a new reply_t object, and inerst it properly
+        reply_t rp_m_(xid); 
+        if (0 == reply_window_[clt_nonce].size()) {
+            // the list is empty before insertion
+            reply_window_[clt_nonce].push_front(rp_m_);
+        } else {
+            // insert the new request based on its xid number
+            // the list goes in decreasing sequence.
+            // the oldest xid at the end of the list
+            for(it = reply_window_[clt_nonce].begin(); it != reply_window_[clt_nonce].end(); it++) {
+                if(it->xid < xid) {
+                    reply_window_[clt_nonce].insert(it, rp_m_);
+                    goto update__;
+                }
+            }
+            // the new xid should be inserted at the end of the list.
+            reply_window_[clt_nonce].push_back(rp_m_);
+        }
+
+        update__:
+        // update the maximum reply for current clt_nonce
+        // we will trim our reply_window_ based on this field, 
+        if(xid_rep > reply_max_ack_[clt_nonce]) { reply_max_ack_[clt_nonce] = xid_rep; }
+        
+        // update the reply window for clt_nonce
+        for(it = reply_window_[clt_nonce].begin(); it !=  reply_window_[clt_nonce].end(); it++) {
+            // whether or not a reply is out-dated
+            if(it->xid <= reply_max_ack_[clt_nonce]) {
+                // the stored xid is smaller than the client's maximum ackownedged number
+                // outdated
+                free(it->buf);  // free its associated storage to avoid memory leak
+                it = reply_window_[clt_nonce].erase(it);
+            }
+        }
+        
+        return NEW;
 }
 
 // rpcs::dispatch calls add_reply when it is sending a reply to an RPC,
@@ -676,7 +741,20 @@ rpcs::add_reply(unsigned int clt_nonce, unsigned int xid,
 		char *b, int sz)
 {
 	ScopedLock rwl(&reply_window_m_);
-        // You fill this in for Lab 1.
+
+        // update the record in our reply_window_
+        // malloc new memeory to store our returned buffer, and its size
+        std::list<reply_t>::iterator it;
+        for(it = reply_window_[clt_nonce].begin(); it != reply_window_[clt_nonce].end(); it++) {
+            if(xid == it->xid) {
+                it->cb_present = true;
+                it->buf = new char[sz+1];
+                memcpy(it->buf, b, sz);
+                it->sz = sz;
+                break;
+            }
+        }
+        return;
 }
 
 void
