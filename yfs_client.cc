@@ -16,8 +16,8 @@ yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
 {
   ec = new extent_client(extent_dst);
   // to guard the extent server from breaking by concurrent operations 
-  lc = new lock_client(lock_dst);
-  
+  // lc = new lock_client(lock_dst);
+  lc = new lock_client_cache(lock_dst);  
   // use random seed
   srand((unsigned)time(NULL));
 

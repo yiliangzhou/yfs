@@ -22,20 +22,118 @@ lock_client_cache::lock_client_cache(std::string xdst,
   std::ostringstream host;
   host << hname << ":" << rlsrpc->port();
   id = host.str();
+  
+  // init the mutex and cond during construction
+  pthread_mutex_init(&m, NULL);
+  // pthread_cond_init(&cond, NULL);
+}
+
+lock_client_cache::~lock_client_cache() {
+  // destroy mutex and cond during destruction
+  pthread_mutex_destroy(&m);
+  std::map<lock_protocol::lockid_t, lock_state*>::iterator it;
+  for(it = cache.begin(); it != cache.end(); it++) {
+    delete (*it).second;
+  } 
 }
 
 lock_protocol::status
 lock_client_cache::acquire(lock_protocol::lockid_t lid)
 {
-  int ret = lock_protocol::OK;
-  return lock_protocol::OK;
+  int r;
+  lock_protocol::status ret = lock_protocol::OK; 
+  pthread_mutex_lock(&m);
+
+  // only construct once.
+  if(cache[lid] == NULL) {
+    printf("new lock record %u created in thread %u\n",lid, pthread_self() );
+    cache[lid] = new lock_state();
+  }
+  
+  // the lock has the following state:
+  // NONE, ACQUIRING, LOCKED, FREE, RELEASING
+
+  while(cache[lid]->ls == RELEASING) {
+    pthread_cond_wait(&cache[lid]->avail_cond, &m);
+  }
+  
+  // the lock has the following state:
+  // NONE, ACQUIRING, LOCKED, FREE
+
+  // acquire either from cache or rpc 
+  if(cache[lid]->ls == NONE) {
+    // init the structure of this lid 
+    // cache[lid]->is_revoked = false;
+    // cache[lid]->retry = false;
+    // cache[lid]->wait_count = 0; 
+    // Know nothing about the lid
+    // acquire from server
+    cache[lid]->ls = ACQUIRING;
+    pthread_mutex_unlock(&m);
+    // acquiring the lock from server.
+    ret = cl->call(lock_protocol::acquire, lid, id, r);
+    // see if the lock is current unavailable
+    pthread_mutex_lock(&m);
+    if(ret == lock_protocol::RETRY) {
+       // wait for the server to notify the availability
+       // of the lock by using retry rpc.
+       // the handler will wake up me.
+       if(!cache[lid]->retry) {
+         pthread_cond_wait(&cache[lid]->retry_cond, &m);
+       }
+       cache[lid]->retry = false;
+    }
+    // VERIFY (ret == lock_protocol::OK);
+    cache[lid]->ls = LOCKED;
+  }else{
+    // hit cache
+    // the lock has following state:
+    // ACQUIRING, LOCKED, FREE
+    cache[lid]->wait_count++;
+    while(cache[lid]->ls != FREE) {
+      pthread_cond_wait(&cache[lid]->avail_cond, &m);
+    }
+    cache[lid]->wait_count--;
+    cache[lid]->ls = LOCKED;
+  }
+  
+  // the lock can only has the following state:
+  // LOCKED
+  pthread_mutex_unlock(&m);
+ 
+  // VERIFY (ret == lock_protocol::OK); 
+  return r;
 }
 
 lock_protocol::status
 lock_client_cache::release(lock_protocol::lockid_t lid)
 {
-  return lock_protocol::OK;
+  int r;
+  // if no revoke message received,
+  // release the lock in cache and notify threads
+  // are waiting for this lock.
+  pthread_mutex_lock(&m);
+  if(cache[lid]->is_revoked && cache[lid]->wait_count==0) {
+     cache[lid]->ls = RELEASING;
+     cache[lid]->is_revoked = false;
+     pthread_mutex_unlock(&m);
+     
+     lock_protocol::status ret = cl->call(lock_protocol::release, lid, id, r);
+     VERIFY (ret == lock_protocol::OK); 
+     printf("release to server success for lid = %u, in thread %u \n", lid, pthread_self());
+     pthread_mutex_lock(&m);
+     cache[lid]->ls = NONE;
+  }else{
+    // do not return the lock to server
+    printf("release to locally count %d for lid = %u, in thread %u \n",cache[lid]->wait_count, lid, pthread_self());
+    cache[lid]->ls = FREE;
+  }
+  // when release done, the state of the lock changed
+  // either from RELEASING to NONE, or LOCKED to FREE 
+  pthread_cond_broadcast(&cache[lid]->avail_cond);
+  pthread_mutex_unlock(&m);
 
+  return lock_protocol::OK;
 }
 
 rlock_protocol::status
@@ -43,6 +141,15 @@ lock_client_cache::revoke_handler(lock_protocol::lockid_t lid,
                                   int &)
 {
   int ret = rlock_protocol::OK;
+  pthread_mutex_lock(&m);
+  printf("revoke for lid = %u get called!!!!!!\n", lid);
+  cache[lid]->is_revoked = true;
+  if(cache[lid]->ls == FREE && cache[lid]->wait_count == 0) {
+    int r;
+    lock_protocol::status ret = cl->call(lock_protocol::release, lid, id, r);
+    VERIFY (ret == lock_protocol::OK);
+  }
+  pthread_mutex_unlock(&m);
   return ret;
 }
 
@@ -51,6 +158,12 @@ lock_client_cache::retry_handler(lock_protocol::lockid_t lid,
                                  int &)
 {
   int ret = rlock_protocol::OK;
+
+  pthread_mutex_lock(&m);
+  cache[lid]->retry = true; 
+  pthread_cond_signal(&cache[lid]->retry_cond);
+  pthread_mutex_unlock(&m);
+
   return ret;
 }
 

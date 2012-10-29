@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "lock_protocol.h"
-#include "lock_client.h"
+#include "lock_client_cache.h"
 
 class scoped_lock_ {
   lock_client *lc;
