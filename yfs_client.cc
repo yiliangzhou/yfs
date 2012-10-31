@@ -2,6 +2,7 @@
 #include "yfs_client.h"
 #include "extent_client.h"
 #include "lock_client.h"
+#include "lock_client_cache.h"
 #include <sstream>
 #include <iostream>
 #include <stdio.h>

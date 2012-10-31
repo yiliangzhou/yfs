@@ -48,6 +48,7 @@ class lock_client_cache : public lock_client {
     LockState ls;
     bool is_revoked;
     bool retry;
+    int revoke_count;
     pthread_cond_t retry_cond;
     pthread_cond_t avail_cond;
     int wait_count; 
@@ -55,7 +56,8 @@ class lock_client_cache : public lock_client {
     lock_state_(): ls(NONE),
                   is_revoked(false),
                   retry(false),
-                  wait_count(0) {
+                  wait_count(0),
+                  revoke_count(0) {
       pthread_cond_init(&retry_cond, NULL);
       pthread_cond_init(&avail_cond, NULL);
     }

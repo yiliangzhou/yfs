@@ -40,21 +40,16 @@ int lock_server_cache::acquire(lock_protocol::lockid_t lid, std::string id,
       ret = lock_protocol::RETRY;
       // revoke the owner if the queue is empty
       if(send_revoke) {
-        printf("------owner is -----%s tid: %u\n",l_state[lid].owner.c_str(), pthread_self());
+        // printf("------owner is -----%s tid: %u\n",l_state[lid].owner.c_str(), pthread_self());
         std::string owner = l_state[lid].owner;
 
         pthread_mutex_unlock(&m);
         handle h(l_state[lid].owner);
         rpcc *cl = h.safebind();
         int r;
-        if(cl) {
-          printf("call revoke of %u in tid: %u\n",lid, pthread_self());
-          cl->call(rlock_protocol::revoke, lid, r);
-          // delete cl;
-        }else{
-          // bind() failed;
-        }
-        
+        VERIFY ( cl != NULL);
+        // printf("call revoke of %u in tid: %u\n",lid, pthread_self());
+        cl->call(rlock_protocol::revoke, lid, r); 
       }else{
         pthread_mutex_unlock(&m);
       }
@@ -70,7 +65,12 @@ lock_server_cache::release(lock_protocol::lockid_t lid, std::string id, int &r)
   r = 0;
  
   pthread_mutex_lock(&m);
-  
+  VERIFY(id.compare(l_state[lid].owner) == 0);
+  if(l_state[lid].ls == FREE) {
+    pthread_mutex_unlock(&m);
+    return lock_protocol::RPCERR;
+  }
+
   if(!l_state[lid].requests.empty()){
     // grant the frist waiting request the lock
     l_state[lid].owner = l_state[lid].requests.front();
@@ -84,11 +84,11 @@ lock_server_cache::release(lock_protocol::lockid_t lid, std::string id, int &r)
     handle h(owner);
     rpcc *cl = h.safebind();
     int r;
-    if(cl) {
-      cl->call(rlock_protocol::retry, lid, r);
-      if(be_revoked) {
-        cl->call(rlock_protocol::revoke, lid, r);
-      }
+    VERIFY (cl != NULL);
+    cl->call(rlock_protocol::retry, lid, r); 
+    // this will revoke current owner twice possible.
+    if(be_revoked) {
+      cl->call(rlock_protocol::revoke, lid, r);
     }
     // delete cl;
   }else{
