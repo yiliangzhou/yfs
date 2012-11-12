@@ -18,7 +18,9 @@ yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
   ec = new extent_client(extent_dst);
   // to guard the extent server from breaking by concurrent operations 
   // lc = new lock_client(lock_dst);
-  lc = new lock_client_cache(lock_dst);  
+
+  // ec is a lock_release_user
+  lc = new lock_client_cache(lock_dst, ec);  
   // use random seed
   srand((unsigned)time(NULL));
 
@@ -257,7 +259,8 @@ yfs_client::exist_(inum parent_inum, const char* name, inum & inum) {
 bool
 yfs_client::exist(inum parent_inum, const char* name, inum & inum) {
 
-  // retrieve content of parent_inum, search if name appears
+  scoped_lock_ lock(lc, parent_inum);
+ // retrieve content of parent_inum, search if name appears
   std::string buf;
   if(extent_protocol::OK != ec->get(parent_inum, buf)) {
     return false;
@@ -281,7 +284,7 @@ yfs_client::create(inum parent_inum, const char* name, inum &inum, int file_or_d
 
   // Check if a file with the same name already exist
   // under parent directory  
-  if(exist(parent_inum, name, inum)) { 
+  if(exist_(parent_inum, name, inum)) { 
     r = EXIST; 
     return r;
   }
@@ -343,7 +346,9 @@ int
 yfs_client::mkdir(inum parent_inum, const char* name, inum & inum) {
   int r = OK;
   scoped_lock_ lock(lc, parent_inum);
+  std::cout<<"mkdir #1"<<std::endl;
   r = create(parent_inum, name, inum, DIR_);
+  std::cout<<"mkdir #2"<<std::endl;
   return r;
 }
 

@@ -129,6 +129,11 @@ lock_client_cache::release(lock_protocol::lockid_t lid)
      cache[lid]->ls = RELEASING;
      cache[lid]->revoke_count--;
      pthread_mutex_unlock(&m);
+
+     std::cout<<"dorelease called in release"<<std::endl;  
+     // notify the user, extent_client, the comming lid releasing
+     lu->dorelease(lid);
+
      lock_protocol::status ret = cl->call(lock_protocol::release, lid, id, r);
      VERIFY (ret == lock_protocol::OK); 
      // printf("release to server lid = %u, in thread %u in release \n", lid, pthread_self());
@@ -164,6 +169,11 @@ lock_client_cache::revoke_handler(lock_protocol::lockid_t lid,
     // printf("release lock lid= %u to server in revoke_handler.\n", lid);
     cache[lid]->ls = RELEASING;
     pthread_mutex_unlock(&m);
+    
+    std::cout<<"dorelease called in revoke"<<std::endl;  
+    // notify the user, extent_client, the comming lid releasing
+    lu->dorelease(lid); 
+
     lock_protocol::status ret = cl->call(lock_protocol::release, lid, id, r);
     pthread_mutex_lock(&m);
     cache[lid]->ls = NONE;
